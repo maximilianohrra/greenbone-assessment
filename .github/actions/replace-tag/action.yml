@@ -1,0 +1,38 @@
+name: "Replace tag in file"
+description: "Replaces all occurrences of one tag with another tag in a text file."
+
+inputs:
+  file_path:
+    description: "Path to the file that must be updated."
+    required: true
+  old_tag:
+    description: "Tag value to be replaced."
+    required: true
+  new_tag:
+    description: "Replacement tag value."
+    required: true
+
+outputs:
+  changed:
+    description: "Whether the file content was actually modified ('true' or 'false')."
+    value: ${{ steps.replace.outputs.changed }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Replace tag
+      id: replace
+      shell: bash
+      env:
+        FILE_PATH: ${{ inputs.file_path }}
+        OLD_TAG: ${{ inputs.old_tag }}
+        NEW_TAG: ${{ inputs.new_tag }}
+      run: |
+        set -euo pipefail
+
+        if grep -q "$OLD_TAG" "$FILE_PATH"; then
+          sed -i "s/$OLD_TAG/$NEW_TAG/g" "$FILE_PATH"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "changed=false" >> "$GITHUB_OUTPUT"
+        fi

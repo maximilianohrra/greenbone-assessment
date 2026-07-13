@@ -1,0 +1,73 @@
+name: "Build and publish image"
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_path:
+        description: "File to update before building the Docker image."
+        required: true
+        default: "sample.txt"
+        type: string
+      old_tag:
+        description: "Tag value to replace."
+        required: true
+        default: "tag1"
+        type: string
+      new_tag:
+        description: "Replacement tag value."
+        required: true
+        default: "tag2"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  change-file:
+    name: "Use change-tag workflow"
+    uses: ./.github/workflows/change-tag.yml
+    permissions:
+      contents: write
+    with:
+      file_path: ${{ inputs.file_path }}
+      old_tag: ${{ inputs.old_tag }}
+      new_tag: ${{ inputs.new_tag }}
+      commit_message: "chore: replace ${{ inputs.old_tag }} with ${{ inputs.new_tag }}"
+
+  build-and-push-image:
+    name: "Build and push Docker image"
+    runs-on: ubuntu-latest
+    needs: change-file
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: "Prepare Docker image metadata"
+        id: image-meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "image_name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "image_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: "Login to GitHub Container Registry"
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Build and push Docker image"
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image-meta.outputs.image_name }}:latest
+            ${{ steps.image-meta.outputs.image_name }}:${{ steps.image-meta.outputs.image_sha }}

@@ -1,0 +1,75 @@
+name: "Change tag and commit"
+
+on:
+  workflow_call:
+    inputs:
+      file_path:
+        description: "Path to the file that must be updated."
+        required: true
+        type: string
+      old_tag:
+        description: "Tag value to be replaced."
+        required: true
+        type: string
+      new_tag:
+        description: "Replacement tag value."
+        required: true
+        type: string
+      commit_message:
+        description: "Commit message used when the file changes."
+        required: false
+        type: string
+        default: "chore: replace tag value"
+    outputs:
+      changed:
+        description: "Whether the file was changed and committed."
+        value: ${{ jobs.change-tag.outputs.changed }}
+
+permissions:
+  contents: write
+
+jobs:
+  change-tag:
+    name: "Change tag and commit"
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.replace.outputs.changed }}
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Replace tag in text file"
+        id: replace
+        uses: ./.github/actions/replace-tag
+        with:
+          file_path: ${{ inputs.file_path }}
+          old_tag: ${{ inputs.old_tag }}
+          new_tag: ${{ inputs.new_tag }}
+
+      - name: "Commit and push changed file"
+        if: steps.replace.outputs.changed == 'true'
+        shell: bash
+        env:
+          FILE_PATH: ${{ inputs.file_path }}
+          COMMIT_MESSAGE: ${{ inputs.commit_message }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$FILE_PATH"
+          git commit -m "$COMMIT_MESSAGE"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: "Report result"
+        shell: bash
+        env:
+          OLD_TAG: ${{ inputs.old_tag }}
+          NEW_TAG: ${{ inputs.new_tag }}
+        run: |
+          echo "## Tag replacement" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ steps.replace.outputs.changed }}" == "true" ]]; then
+            echo "✅ Tag replaced: $OLD_TAG → $NEW_TAG" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ℹ️ No changes — $OLD_TAG was not found." >> "$GITHUB_STEP_SUMMARY"
+          fi
