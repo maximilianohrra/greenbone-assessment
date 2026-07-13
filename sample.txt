@@ -1,1 +1,1 @@
-application_version=tag1
+application_version=tag2
